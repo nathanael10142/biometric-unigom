@@ -26,7 +26,7 @@ class Settings(BaseSettings):
     
     # CORS Configuration - Use string to avoid auto-JSON parsing issues
     CORS_ORIGINS: str = Field(
-        default="http://localhost:3000,http://localhost:3001",
+        default="http://localhost:3000,http://localhost:3001,https://unigom.onrender.com",
         description="CORS allowed origins (comma-separated)"
     )
     
