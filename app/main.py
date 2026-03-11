@@ -21,7 +21,7 @@ import app.models.prod.user_prod
 import app.models.prod.poste
 import app.models.prod.affectation_prod
 
-from app.routers import auth, attendance, dashboard, employees
+from app.routers import auth, attendance, dashboard, employees, postes
 
 from app.services.scheduler import start_scheduler, stop_scheduler
 from app.services.ehome_listener import start_ehome_server
@@ -118,6 +118,7 @@ app.include_router(auth.router, prefix=_PREFIX)
 app.include_router(employees.router, prefix=_PREFIX)
 app.include_router(attendance.router, prefix=_PREFIX)
 app.include_router(dashboard.router, prefix=_PREFIX)
+app.include_router(postes.router, prefix=_PREFIX)
 
 @app.get("/health", tags=["System"], include_in_schema=False)
 def health_check():
