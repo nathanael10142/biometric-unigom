@@ -198,7 +198,7 @@ class HikvisionClient:
                 )
 
             if not info_list:
-                    logger.debug(
+                logger.debug(
                     "[HIKVISION] Empty InfoList at pos=%d — done after %d pages",
                     position, page_num - 1,
                 )

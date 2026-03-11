@@ -26,8 +26,8 @@ class Settings(BaseSettings):
     JWT_EXPIRE_MINUTES: int = 1440
     
     # CORS Configuration - Accept string or list from env
-    CORS_ORIGINS: Union[str, List[str]] = Field(
-        default="http://localhost:3000,http://localhost:3001",
+    CORS_ORIGINS: List[str] = Field(
+        default=["http://localhost:3000", "http://localhost:3001"],
         description="CORS allowed origins (comma-separated or JSON array)"
     )
     
