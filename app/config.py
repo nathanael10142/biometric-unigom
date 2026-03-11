@@ -8,6 +8,8 @@ class Settings(BaseSettings):
     APP_NAME: str = "UNIGOM Biométrie"
     APP_VERSION: str = "1.0.0"
     DEBUG: bool = False
+    # Supabase PostgreSQL URL
+    DATABASE_URL: str = "postgresql://postgres.abjlfxnvepxfazsagxtu:mGwH1hb9IeAJ1KO2193LACV6lQFwcpMoKfM996KFBJA@aws-0-eu-central-1.pooler.supabase.com:6543/postgres"
     DATABASE_PROD_URL: str = (
         "mysql+pymysql://root:password@localhost:3306/rhunigom__database_production?charset=utf8mb4"
     )

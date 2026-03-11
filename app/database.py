@@ -27,8 +27,11 @@ class ProdBase(DeclarativeBase):
 
 
 # ── Presence DB engine (our attendance records) ────────────────────────────────
+# Use Supabase PostgreSQL if DATABASE_URL is set, otherwise local MySQL
+db_url = settings.DATABASE_URL if hasattr(settings, 'DATABASE_URL') and settings.DATABASE_URL else settings.DATABASE_PRESENCE_URL
+
 local_engine = create_engine(
-    settings.DATABASE_PRESENCE_URL,
+    db_url,
     pool_pre_ping=True,
     pool_size=10,
     max_overflow=20,

@@ -1,0 +1,30 @@
+services:
+  - type: web
+    name: unigom-biometric-backend
+    env: python
+    plan: free
+    buildCommand: pip install -r requirements.txt && python render_deploy.py
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT --workers 1
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: unigom-postgres
+          property: connectionString
+      - key: SUPABASE_URL
+        value: https://abjlfxnvepxfazsagxtu.supabase.co
+      - key: SUPABASE_SERVICE_KEY
+        sync: false
+      - key: JWT_SECRET_KEY
+        generateValue: true
+      - key: DEBUG
+        value: "False"
+      - key: ENVIRONMENT
+        value: "production"
+      - key: CORS_ORIGINS
+        value: "http://localhost:3000,http://localhost:3001"
+
+databases:
+  - name: unigom-postgres
+    databaseName: unigom
+    user: postgres
+    plan: free
