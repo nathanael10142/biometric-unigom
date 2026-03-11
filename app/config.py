@@ -1,7 +1,8 @@
 from functools import lru_cache
-from typing import List
+from typing import List, Union
+import json as json_module
 
-from pydantic import field_validator
+from pydantic import field_validator, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
@@ -24,11 +25,11 @@ class Settings(BaseSettings):
     JWT_ALGORITHM: str = "HS256"
     JWT_EXPIRE_MINUTES: int = 1440
     
-    # CORS Configuration
-    CORS_ORIGINS: List[str] = [
-        "http://localhost:3000",
-        "http://localhost:3001",
-    ]
+    # CORS Configuration - Accept string or list from env
+    CORS_ORIGINS: Union[str, List[str]] = Field(
+        default="http://localhost:3000,http://localhost:3001",
+        description="CORS allowed origins (comma-separated or JSON array)"
+    )
     
     # Hikvision Terminal
     HIKVISION_IP: str = "192.168.1.115"
@@ -65,40 +66,46 @@ class Settings(BaseSettings):
 
     @field_validator("CORS_ORIGINS", mode="before")
     @classmethod
-    def parse_cors_origins(cls, v):
-        """Parse CORS_ORIGINS from string or list"""
+    def parse_cors_origins(cls, v) -> List[str]:
+        """Parse CORS_ORIGINS from string, list, or JSON"""
         # If already a list, return as-is
         if isinstance(v, list):
-            return v
+            return v if v else ["http://localhost:3000", "http://localhost:3001"]
         
         # If string, try to parse
         if isinstance(v, str):
             # Handle empty strings
-            if not v or v.strip() == "":
-                return [
-                    "http://localhost:3000",
-                    "http://localhost:3001",
-                ]
+            if not v or v.strip() == "" or v.strip() == "[]" or v.strip() == "None":
+                return ["http://localhost:3000", "http://localhost:3001"]
             
             # Try JSON parsing first
-            import json
             try:
-                return json.loads(v)
-            except (json.JSONDecodeError, ValueError):
-                # Fall back to comma-separated parsing
-                try:
-                    return [o.strip() for o in v.split(",") if o.strip()]
-                except Exception:
-                    return [
-                        "http://localhost:3000",
-                        "http://localhost:3001",
-                    ]
+                result = json_module.loads(v)
+                if isinstance(result, list) and result:
+                    return result
+            except (json_module.JSONDecodeError, ValueError, TypeError):
+                pass
+            
+            # Fall back to comma-separated parsing
+            try:
+                origins = [o.strip() for o in v.split(",") if o.strip()]
+                return origins if origins else ["http://localhost:3000", "http://localhost:3001"]
+            except Exception:
+                pass
         
         # Default fallback
-        return [
-            "http://localhost:3000",
-            "http://localhost:3001",
-        ]
+        return ["http://localhost:3000", "http://localhost:3001"]
+    
+    @field_validator("CORS_ORIGINS", mode="after")
+    @classmethod
+    def ensure_cors_is_list(cls, v) -> List[str]:
+        """Ensure CORS_ORIGINS is always a list"""
+        if isinstance(v, str):
+            # Should not happen with mode=before validator, but safety check
+            return [v]
+        if isinstance(v, list):
+            return v
+        return ["http://localhost:3000", "http://localhost:3001"]
 
 @lru_cache
 def get_settings() -> Settings:
