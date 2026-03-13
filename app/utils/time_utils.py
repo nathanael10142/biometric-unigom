@@ -92,11 +92,24 @@ def determine_arrival_status(arrival_time: time) -> str:
     08:01–08:19 → "LATE"
     ≥ 08:20  → "REFUSED"
     """
+    # Log de debug pour le parsing
+    from app.config import settings
+    logger = logging.getLogger(__name__)
+    
+    logger.info(
+        "[TIME] Raw arrival_time=%s | ON_TIME_CUTOFF=%s | LATE_CUTOFF=%s",
+        arrival_time, _ON_TIME_CUTOFF, _LATE_CUTOFF
+    )
+    
     if arrival_time <= _ON_TIME_CUTOFF:
-        return "PRESENT"
-    if arrival_time < _LATE_CUTOFF:
-        return "LATE"
-    return "REFUSED"
+        status = "PRESENT"
+    elif arrival_time < _LATE_CUTOFF:
+        status = "LATE"
+    else:
+        status = "REFUSED"
+    
+    logger.info("[TIME] Determined status=%s for arrival_time=%s", status, arrival_time)
+    return status
 
 
 def is_valid_departure(departure_time: time) -> bool:

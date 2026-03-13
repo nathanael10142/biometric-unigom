@@ -88,10 +88,20 @@ def process_event(db: Session, agent: AgentCache, event_dt: datetime) -> bool:
             return False  # first scan wins
 
         status = determine_arrival_status(clock_time)
+        
+        # Logs de debug détaillés pour comprendre le problème
+        logger.info(
+            "[ARRIVAL] Agent=%s | Date=%s | Time=%s | Status=%s | Existing=%s",
+            agent.full_name, event_date, clock_time, status, existing.status if existing else "NEW"
+        )
 
         if existing:
             existing.time_in = event_dt
             existing.status = status
+            logger.info(
+                "[ARRIVAL] UPDATED: Agent=%s | New Status=%s | Time=%s",
+                agent.full_name, status, event_dt
+            )
         else:
             db.add(Attendance(
                 agent_uuid=agent.uuid,
@@ -99,10 +109,15 @@ def process_event(db: Session, agent: AgentCache, event_dt: datetime) -> bool:
                 time_in=event_dt,
                 status=status,
             ))
+            logger.info(
+                "[ARRIVAL] CREATED: Agent=%s | Status=%s | Time=%s",
+                agent.full_name, status, event_dt
+            )
         try:
             db.commit()
         except IntegrityError:
             db.rollback()
+            logger.error("[ARRIVAL] ERROR: Failed to save attendance for %s", agent.full_name)
             return False
         return True
 

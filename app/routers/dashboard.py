@@ -37,6 +37,16 @@ def get_stats(
         .all()
     )
     counts = {row.status: row.cnt for row in rows}
+    
+    # Log détaillé des comptages du jour
+    logger.info(
+        "[DASHBOARD] Stats du %s | Present=%d | Late=%d | Absent=%d | Refused=%d",
+        today.isoformat(), 
+        counts.get("PRESENT", 0), 
+        counts.get("LATE", 0), 
+        counts.get("ABSENT", 0), 
+        counts.get("REFUSED", 0)
+    )
 
     # Total active agents from local cache
     total: int = (
@@ -48,13 +58,16 @@ def get_stats(
     late    = counts.get("LATE", 0)
     absent  = counts.get("ABSENT", 0)
     refused = counts.get("REFUSED", 0)
-    rate    = round((present + late) / total * 100) if total > 0 else 0
+    
+    # Logique: retard = présent (car il a pointé) donc on inclut les retards dans les présents
+    total_present = present + late
+    rate    = round(total_present / total * 100) if total > 0 else 0
 
     is_weekend = today.weekday() in (5, 6)
 
     return DashboardStats(
         date=today.isoformat(),
-        present=present,
+        present=total_present,  # Retard = présent, donc on montre le total des présents
         late=late,
         absent=absent,
         refused=refused,
@@ -102,6 +115,12 @@ def get_weekly(
             key = row.status.lower()
             if key in ("present", "late", "absent", "refused"):
                 data[row.date][key] = row.cnt
+    
+    # Logique: pour chaque jour, calculer total_present = present + late
+    for day_data in data.values():
+        if day_data["day_label"] not in ("Sam", "Dim"):  # Jours ouvrés seulement
+            total_present = day_data.get("present", 0) + day_data.get("late", 0)
+            day_data["total_present"] = total_present  # Ajouter le total des présents
 
     return [
         WeeklyDataPoint(**v)
