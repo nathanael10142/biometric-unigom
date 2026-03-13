@@ -66,15 +66,22 @@ def login(
             local_db.commit()
 
     # ── Look up user in production DB ─────────────────────────────────────────
-    user: UserProd | None = (
-        prod_db.query(UserProd)
-        .filter(
-            UserProd.email == email,
-            UserProd.isActive == True,
-            UserProd.deletedAt == None,
+    try:
+        user: UserProd | None = (
+            prod_db.query(UserProd)
+            .filter(
+                UserProd.email == email,
+                UserProd.isActive == True,
+                UserProd.deletedAt == None,
+            )
+            .first()
         )
-        .first()
-    )
+    except Exception as db_exc:  # pragma: no cover - defensive
+        # A ProgrammingError (table missing) or connection issue should never
+        # leak out as a 500 to the frontend.  Log the situation and convert to
+        # an authentication failure which the client can handle gracefully.
+        logger.error("[AUTH] prod DB lookup failed: %s", db_exc, exc_info=True)
+        user = None
 
     # ── Credential validation ──────────────────────────────────────────────────
     if user is None or not verify_password(form_data.password, user.password):

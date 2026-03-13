@@ -11,6 +11,8 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.database import LocalSessionLocal
 from app.services.attendance_service import process_pushed_event
+from app.services.websocket_manager import manager
+
 
 logger = logging.getLogger("ehome")
 
@@ -106,6 +108,16 @@ async def _process_event(payload: Dict[str, str]) -> None:
         )
         if processed:
             logger.debug("[EHOME] event handled serial=%s bio=%s device=%s campus=%s", serial, biometric_id, device_id, settings.CAMPUS_ID)
+            # Ultra-pro real-time: broadcast to frontend
+            await manager.broadcast({
+                "type": "new_scan",
+                "biometric_id": biometric_id,
+                "serial_no": serial,
+                "raw_time": raw_time,
+                "device_id": device_id,
+                "campus_id": settings.CAMPUS_ID,
+                "processed": True
+            })
         else:
             logger.debug("[EHOME] event ignored serial=%s bio=%s", serial, biometric_id)
     finally:

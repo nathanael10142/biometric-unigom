@@ -1,0 +1,291 @@
+# Meta-inspired Microservices Architecture for UNIGOM
+version: '3.8'
+
+services:
+  # API Gateway - Entry point for all requests
+  gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile.gateway
+    ports:
+      - "8000:8000"
+    environment:
+      - ENVIRONMENT=production
+      - DEBUG=false
+      - CORS_ORIGINS=http://localhost:3000,https://unigom.onrender.com
+    depends_on:
+      - auth-service
+      - dashboard-service
+      - attendance-service
+      - employees-service
+      - notifications-service
+      - analytics-service
+      - realtime-service
+    networks:
+      - unigom-network
+    restart: unless-stopped
+
+  # Authentication Service
+  auth-service:
+    build:
+      context: .
+      dockerfile: Dockerfile.auth
+    ports:
+      - "8001:8001"
+    environment:
+      - DATABASE_URL=mysql+pymysql://root:password@mysql-auth:3306/auth_db
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      - mysql-auth
+      - redis
+    networks:
+      - unigom-network
+    restart: unless-stopped
+
+  # Dashboard Analytics Service
+  dashboard-service:
+    build:
+      context: .
+      dockerfile: Dockerfile.dashboard
+    ports:
+      - "8004:8004"
+    environment:
+      - DATABASE_URL=mysql+pymysql://root:password@mysql-dashboard:3306/dashboard_db
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      - mysql-dashboard
+      - redis
+    networks:
+      - unigom-network
+    restart: unless-stopped
+
+  # Attendance Service
+  attendance-service:
+    build:
+      context: .
+      dockerfile: Dockerfile.attendance
+    ports:
+      - "8002:8002"
+    environment:
+      - DATABASE_URL=mysql+pymysql://root:password@mysql-attendance:3306/attendance_db
+      - HIKVISION_IP=${HIKVISION_IP}
+      - HIKVISION_USER=${HIKVISION_USER}
+      - HIKVISION_PASSWORD=${HIKVISION_PASSWORD}
+    depends_on:
+      - mysql-attendance
+    networks:
+      - unigom-network
+    restart: unless-stopped
+
+  # Employees Service
+  employees-service:
+    build:
+      context: .
+      dockerfile: Dockerfile.employees
+    ports:
+      - "8003:8003"
+    environment:
+      - DATABASE_URL=mysql+pymysql://root:password@mysql-employees:3306/employees_db
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      - mysql-employees
+      - redis
+    networks:
+      - unigom-network
+    restart: unless-stopped
+
+  # Notifications Service
+  notifications-service:
+    build:
+      context: .
+      dockerfile: Dockerfile.notifications
+    ports:
+      - "8005:8005"
+    environment:
+      - DATABASE_URL=mysql+pymysql://root:password@mysql-notifications:3306/notifications_db
+      - REDIS_URL=redis://redis:6379
+      - SMTP_HOST=${SMTP_HOST}
+      - SMTP_PORT=${SMTP_PORT}
+    depends_on:
+      - mysql-notifications
+      - redis
+    networks:
+      - unigom-network
+    restart: unless-stopped
+
+  # Analytics Service
+  analytics-service:
+    build:
+      context: .
+      dockerfile: Dockerfile.analytics
+    ports:
+      - "8006:8006"
+    environment:
+      - DATABASE_URL=mysql+pymysql://root:password@mysql-analytics:3306/analytics_db
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      - mysql-analytics
+      - redis
+    networks:
+      - unigom-network
+    restart: unless-stopped
+
+  # Real-time WebSocket Service
+  realtime-service:
+    build:
+      context: .
+      dockerfile: Dockerfile.realtime
+    ports:
+      - "8007:8007"
+    environment:
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      - redis
+    networks:
+      - unigom-network
+    restart: unless-stopped
+
+  # Redis for caching and message queuing
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - unigom-network
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+
+  # MySQL databases for each service
+  mysql-auth:
+    image: mysql:8.0
+    environment:
+      - MYSQL_ROOT_PASSWORD=password
+      - MYSQL_DATABASE=auth_db
+    volumes:
+      - mysql_auth_data:/var/lib/mysql
+      - ./init-scripts/auth.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - unigom-network
+    restart: unless-stopped
+
+  mysql-dashboard:
+    image: mysql:8.0
+    environment:
+      - MYSQL_ROOT_PASSWORD=password
+      - MYSQL_DATABASE=dashboard_db
+    volumes:
+      - mysql_dashboard_data:/var/lib/mysql
+      - ./init-scripts/dashboard.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - unigom-network
+    restart: unless-stopped
+
+  mysql-attendance:
+    image: mysql:8.0
+    environment:
+      - MYSQL_ROOT_PASSWORD=password
+      - MYSQL_DATABASE=attendance_db
+    volumes:
+      - mysql_attendance_data:/var/lib/mysql
+      - ./init-scripts/attendance.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - unigom-network
+    restart: unless-stopped
+
+  mysql-employees:
+    image: mysql:8.0
+    environment:
+      - MYSQL_ROOT_PASSWORD=password
+      - MYSQL_DATABASE=employees_db
+    volumes:
+      - mysql_employees_data:/var/lib/mysql
+      - ./init-scripts/employees.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - unigom-network
+    restart: unless-stopped
+
+  mysql-notifications:
+    image: mysql:8.0
+    environment:
+      - MYSQL_ROOT_PASSWORD=password
+      - MYSQL_DATABASE=notifications_db
+    volumes:
+      - mysql_notifications_data:/var/lib/mysql
+      - ./init-scripts/notifications.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - unigom-network
+    restart: unless-stopped
+
+  mysql-analytics:
+    image: mysql:8.0
+    environment:
+      - MYSQL_ROOT_PASSWORD=password
+      - MYSQL_DATABASE=analytics_db
+    volumes:
+      - mysql_analytics_data:/var/lib/mysql
+      - ./init-scripts/analytics.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - unigom-network
+    restart: unless-stopped
+
+  # Nginx Load Balancer
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf
+      - ./nginx/ssl:/etc/nginx/ssl
+    depends_on:
+      - gateway
+    networks:
+      - unigom-network
+    restart: unless-stopped
+
+  # Prometheus for monitoring
+  prometheus:
+    image: prom/prometheus:latest
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    networks:
+      - unigom-network
+    restart: unless-stopped
+
+  # Grafana for visualization
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3001:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin123
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards
+      - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources
+    depends_on:
+      - prometheus
+    networks:
+      - unigom-network
+    restart: unless-stopped
+
+volumes:
+  redis_data:
+  mysql_auth_data:
+  mysql_dashboard_data:
+  mysql_attendance_data:
+  mysql_employees_data:
+  mysql_notifications_data:
+  mysql_analytics_data:
+  prometheus_data:
+  grafana_data:
+
+networks:
+  unigom-network:
+    driver: bridge

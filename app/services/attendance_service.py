@@ -7,6 +7,7 @@ from typing import List, Optional
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.models.agent_cache import AgentCache
 from app.models.attendance import Attendance
 from app.models.scan_log import ScanLog
@@ -186,8 +187,19 @@ def _get_cursor(db: Session) -> SyncCursor:
     )
     if cursor is None:
         cursor = SyncCursor(key=_CURSOR_KEY, last_position=0, last_serial=None)
-        db.add(cursor)
-        db.flush()
+        try:
+            db.add(cursor)
+            db.flush()
+        except IntegrityError:
+            # Another process created it, query again
+            db.rollback()
+            cursor = (
+                db.query(SyncCursor)
+                .filter(SyncCursor.key == _CURSOR_KEY)
+                .first()
+            )
+            if cursor is None:
+                raise RuntimeError("Failed to get or create sync cursor")
     return cursor
 
 

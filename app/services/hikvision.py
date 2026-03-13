@@ -179,11 +179,12 @@ class HikvisionClient:
             try:
                 data = self.fetch_events(start_time, end_time, page_size, position)
             except Exception as exc:
+                # log and break; return whatever we've fetched so far
                 logger.error(
                     "[HIKVISION] fetch_events failed page=%d pos=%d: %s",
                     page_num, position, exc,
                 )
-                raise
+                break
 
             acs       = data.get("AcsEvent", {})
             info_list = acs.get("InfoList") or []

@@ -44,12 +44,12 @@ class Employee(Base):
     )
 
     # Relationships
-    attendances: Mapped[List["Attendance"]] = relationship(
-        "Attendance", back_populates="employee", cascade="all, delete-orphan"
-    )
-    scan_logs: Mapped[List["ScanLog"]] = relationship(
-        "ScanLog", back_populates="employee", cascade="all, delete-orphan"
-    )
+    # NOTE: attendances and scan_logs used to be modeled directly against the
+    # employees table, but the current presence schema links through
+    # ``agent_cache`` instead.  keeping these properties here caused SQLAlchemy
+    # startup to raise ``InvalidRequestError`` (no foreign key exists), so we
+    # simply drop them.  If you ever need to traverse from an employee ID to
+    # attendance/scan data, query ``AgentCache`` instead.
 
     def __repr__(self) -> str:
         return f"<Employee id={self.id} name={self.name!r} biometric={self.biometric_id!r}>"

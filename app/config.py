@@ -7,11 +7,11 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     APP_NAME: str = "UNIGOM Biométrie"
     APP_VERSION: str = "1.0.0"
-    DEBUG: bool = False
+    DEBUG: bool = True  # Enable debug by default for development
     ENVIRONMENT: str = "development"
     
-    # Database URLs
-    DATABASE_URL: str = "postgresql://postgres.abjlfxnvepxfazsagxtu:mGwH1hb9IeAJ1KO2193LACV6lQFwcpMoKfM996KFBJA@aws-0-eu-central-1.pooler.supabase.com:6543/postgres"
+    # Database URLs - All using local MySQL
+    DATABASE_URL: str = "mysql+pymysql://root:password@localhost:3306/rhunigom_presence?charset=utf8mb4"
     DATABASE_PROD_URL: str = (
         "mysql+pymysql://root:password@localhost:3306/rhunigom__database_production?charset=utf8mb4"
     )
@@ -66,23 +66,59 @@ class Settings(BaseSettings):
     @field_validator("CORS_ORIGINS", mode="before")
     @classmethod
     def parse_cors_origins(cls, v) -> str:
-        """Parse CORS_ORIGINS from string, ensuring it's never empty"""
-        # If already a string, return default if empty
+        """Parse CORS_ORIGINS from string, ensuring it's never empty.
+
+        This validator handles both bare comma‑separated strings *and* JSON
+        list literals which are commonly written in an env file.  The former is
+        what the application expects internally; the latter is what tools such
+        as `docker-compose` will happily store when you use `CORS_ORIGINS=["a","b"]`.
+        """
         if isinstance(v, str):
-            if not v or v.strip() == "" or v.strip() == "[]" or v.strip() == "None":
+            txt = v.strip()
+            if not txt or txt in ("[]", "None"):
                 return "http://localhost:3000,http://localhost:3001"
-            return v
-        
+
+            # try to parse a JSON list and convert back to comma string
+            if txt.startswith("[") and txt.endswith("]"):
+                try:
+                    import json
+
+                    parsed = json.loads(txt)
+                    if isinstance(parsed, list):
+                        return ",".join(parsed)
+                except Exception:  # stay silent and fall back to manual splitting
+                    pass
+
+            return txt
+
         # Default fallback
         return "http://localhost:3000,http://localhost:3001"
     
     @field_validator("CORS_ORIGINS", mode="after")
     @classmethod
     def ensure_cors_is_list(cls, v) -> List[str]:
-        """Convert CORS_ORIGINS string to list for the application"""
+        """Convert CORS_ORIGINS string to list for the application.
+
+        The input may still be a JSON‑style string with quoted entries; strip
+        extraneous characters so that FastAPI sees bare origins.
+        """
         if isinstance(v, str):
-            # Split by comma and filter empty
-            origins = [o.strip() for o in v.split(",") if o.strip()]
+            txt = v.strip()
+            # try again to parse json if we accidentally dropped it earlier
+            if txt.startswith("[") and txt.endswith("]"):
+                try:
+                    import json
+
+                    parsed = json.loads(txt)
+                    if isinstance(parsed, list):
+                        origins = [o.strip() for o in parsed if isinstance(o, str) and o.strip()]
+                        if origins:
+                            return origins
+                except Exception:
+                    pass
+
+            # manual split and remove any surrounding quotes/brackets
+            origins = [o.strip().strip('"').strip("'").strip("[]") for o in txt.split(",") if o.strip()]
             return origins if origins else ["http://localhost:3000", "http://localhost:3001"]
         if isinstance(v, list):
             return v

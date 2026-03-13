@@ -1,6 +1,7 @@
 
 
 import logging
+import uuid
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -29,6 +30,8 @@ router = APIRouter(prefix="/employees", tags=["Agents"])
 
 
 def _cache_to_response(a: AgentCache) -> AgentResponse:
+    # build the response with both the frontend-friendly names and the
+    # original attributes so that the Pydantic model can populate aliases
     return AgentResponse(
         uuid=a.uuid,
         matricule=a.matricule,
@@ -40,6 +43,10 @@ def _cache_to_response(a: AgentCache) -> AgentResponse:
         biometric_id=a.biometric_id,
         statut=a.statut,
         is_active=a.is_active,
+        # frontend aliases
+        id=a.uuid,
+        name=a.full_name,
+        phone=a.telephone,
     )
 
 
@@ -180,6 +187,68 @@ def set_biometric_id(
 
 
 # ── Sync agents from production ───────────────────────────────────────────────
+
+
+@router.post(
+    "",
+    response_model=AgentResponse,
+    status_code=201,
+    summary="Créer un nouvel agent localement (pour tests)",
+)
+def create_agent(
+    data: dict,
+    db: Session = Depends(get_db),
+    prod_db: Session = Depends(get_prod_db),
+    admin: UserProd = Depends(get_current_admin),
+) -> AgentResponse:
+    """Accept a minimal employee payload from the frontend and insert it in
+    the local cache.  The incoming structure is intentionally loose to match
+    the React `CreateEmployeeRequest`; we map the fields here.
+
+    This endpoint exists primarily for development.  In production HR is the
+    source of truth and agents are synced via `/employees/sync`; calling the
+    endpoint will not add anything to the production database.
+    """
+
+    # map frontend keys to database columns
+    name = data.get("name") or data.get("full_name")
+    if not name:
+        raise HTTPException(status_code=400, detail="'name' is required")
+
+    biometric = data.get("biometric_id")
+
+    # uniqueness check on biometric_id
+    if biometric is not None:
+        conflict = (
+            db.query(AgentCache)
+            .filter(AgentCache.biometric_id == biometric)
+            .first()
+        )
+        if conflict:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"L'ID biométrique « {biometric} » est déjà attribué à {conflict.full_name}.",
+            )
+
+    new_uuid = str(uuid.uuid4())
+    agent = AgentCache(
+        uuid=new_uuid,
+        matricule=data.get("matricule", ""),
+        full_name=name,
+        department=data.get("department", ""),
+        position=data.get("position", ""),
+        email=data.get("email"),
+        telephone=data.get("phone") or data.get("telephone"),
+        biometric_id=biometric,
+        statut=data.get("statut", "actif"),
+        is_active=data.get("is_active", True),
+    )
+    db.add(agent)
+    db.commit()
+    db.refresh(agent)
+
+    logger.info("[EMPLOYEES] Admin %r created agent %r", admin.email, agent.full_name)
+    return _cache_to_response(agent)
 
 
 @router.post(

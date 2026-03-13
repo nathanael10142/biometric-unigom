@@ -21,7 +21,7 @@ import app.models.prod.user_prod
 import app.models.prod.poste
 import app.models.prod.affectation_prod
 
-from app.routers import auth, attendance, dashboard, employees, postes
+from app.routers import auth, attendance, dashboard, employees, postes, websocket
 
 from app.services.scheduler import start_scheduler, stop_scheduler
 from app.services.ehome_listener import start_ehome_server
@@ -37,25 +37,32 @@ logger = logging.getLogger("unigom")
 async def lifespan(app: FastAPI):
     logger.info("══════════════════════════════════════════════════")
     logger.info("  UNIGOM Biométrie v%s — Démarrage", settings.APP_VERSION)
-    logger.info("  Prod DB  : %s", settings.DATABASE_PROD_URL.split("@")[-1])
+    if settings.DATABASE_PROD_URL:
+        prod_display = settings.DATABASE_PROD_URL.split("@")[-1]
+    else:
+        prod_display = "(none)"
+    logger.info("  Prod DB  : %s", prod_display)
     logger.info("  Local DB : %s", settings.DATABASE_PRESENCE_URL.split("@")[-1])
     logger.info("══════════════════════════════════════════════════")
 
     LocalBase.metadata.create_all(bind=local_engine)
     logger.info("[DB] Tables présence synchronisées (rhunigom_presence)")
 
-    try:
-        from app.services.agent_sync_service import sync_agents
-        prod_db = ProdSessionLocal()
-        local_db = LocalSessionLocal()
+    if settings.DATABASE_PROD_URL:
         try:
-            summary = sync_agents(prod_db, local_db)
-            logger.info("[STARTUP] Agent cache initialisé — %s", summary)
-        finally:
-            prod_db.close()
-            local_db.close()
-    except Exception as exc:
-        logger.warning("[STARTUP] Agent sync failed (will retry on next sync): %s", exc)
+            from app.services.agent_sync_service import sync_agents
+            prod_db = ProdSessionLocal()
+            local_db = LocalSessionLocal()
+            try:
+                summary = sync_agents(prod_db, local_db)
+                logger.info("[STARTUP] Agent cache initialisé — %s", summary)
+            finally:
+                prod_db.close()
+                local_db.close()
+        except Exception as exc:
+            logger.warning("[STARTUP] Agent sync failed (will retry on next sync): %s", exc)
+    else:
+        logger.info("[STARTUP] Skipping agent sync because DATABASE_PROD_URL is not set")
 
     start_scheduler()
 
@@ -92,6 +99,8 @@ app = FastAPI(
     redoc_url="/api/redoc" if settings.DEBUG else None,
     openapi_url="/api/openapi.json" if settings.DEBUG else None,
 )
+# make it easy to verify what CORS origins the application actually sees
+logger.debug("Configured CORS origins: %s", settings.CORS_ORIGINS)
 
 app.add_middleware(
     CORSMiddleware,
@@ -109,16 +118,38 @@ async def _unhandled_exception_handler(request: Request, exc: Exception) -> JSON
         request.method, request.url.path, exc,
         exc_info=True,
     )
-    return JSONResponse(
-        status_code=500,
+    # Build the standard error response
+    response = JSONResponse(
+        status_code=5_00,
         content={"detail": "Erreur interne du serveur. Consultez les logs."},
     )
+    # Ensure the client sees a CORS header if the request included an Origin
+    origin = request.headers.get("origin")
+    if origin:
+        # fastapi's CORSMiddleware would normally handle this, but we appear to
+        # be upstream of it when an unhandled exception bubbles out.  Add the
+        # header manually so the browser doesn't swallow the body entirely.
+        response.headers["Access-Control-Allow-Origin"] = origin
+        response.headers["Vary"] = "Origin"
+    return response
 
 app.include_router(auth.router, prefix=_PREFIX)
 app.include_router(employees.router, prefix=_PREFIX)
 app.include_router(attendance.router, prefix=_PREFIX)
 app.include_router(dashboard.router, prefix=_PREFIX)
 app.include_router(postes.router, prefix=_PREFIX)
+app.include_router(websocket.router, prefix=_PREFIX)
+
+@app.get("/", include_in_schema=False)
+def root():
+    """Basic landing page for curl or browser checks.
+
+    This avoids returning a generic 404 when someone hits the bare host.  It
+    does not appear in the OpenAPI schema because we only use it for sanity
+    checks from health‑checkers or developers.
+    """
+    return {"status": "up", "service": "unigom-api"}
+
 
 @app.get("/health", tags=["System"], include_in_schema=False)
 def health_check():

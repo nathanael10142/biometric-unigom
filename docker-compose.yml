@@ -2,23 +2,22 @@ version: "3.9"
 
 # ─────────────────────────────────────────────────────────────────────────────
 #  UNIGOM Biométrie — Docker Compose stack
-#  Services: db (PostgreSQL 16) · api (FastAPI) · nginx (reverse proxy)
+#  Services: db (MySQL 8.0) · api (FastAPI) · nginx (reverse proxy)
 # ─────────────────────────────────────────────────────────────────────────────
 
 services:
-  # ── PostgreSQL ─────────────────────────────────────────────
+  # ── MySQL ──────────────────────────────────────────────────
   db:
-    image: postgres:16-alpine
+    image: mysql:8.0
     container_name: unigom_db
     environment:
-      POSTGRES_DB: unigom_bio
-      POSTGRES_USER: unigom
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-unigom_secret_pass}
-      PGDATA: /var/lib/postgresql/data/pgdata
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD:-password}
+      MYSQL_USER: rhunigom_presence_users
+      MYSQL_PASSWORD: ${DB_PASSWORD:-password}
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - mysql_data:/var/lib/mysql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U unigom -d unigom_bio"]
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -34,12 +33,26 @@ services:
     container_name: unigom_api
     env_file: .env
     environment:
-      DATABASE_URL: postgresql+psycopg2://unigom:${DB_PASSWORD:-unigom_secret_pass}@db:5432/unigom_bio
+      # presence DB – used for attendance records & lockout tracking
+      DATABASE_URL: mysql+pymysql://root:${DB_PASSWORD:-password}@db:3306/rhunigom_presence?charset=utf8mb4
+      # production HR database (read‑only).  point at the same container for
+      # local testing; adjust as needed when you have a real prod server.
+      DATABASE_PROD_URL: mysql+pymysql://root:${DB_PASSWORD:-password}@db:3306/rhunigom__database_production?charset=utf8mb4
+      # alias to DATABASE_URL for backward compatibility; should be same host
+      DATABASE_PRESENCE_URL: mysql+pymysql://root:${DB_PASSWORD:-password}@db:3306/rhunigom_presence?charset=utf8mb4
+      CORS_ORIGINS: "http://localhost:3000,http://localhost:3001"
     depends_on:
       db:
         condition: service_healthy
+
+    # IMPORTANT : expose + ports pour accès externe
     expose:
       - "8000"
+      - "7660"        # allow EHome TCP push connections
+    ports:
+      - "8000:8000"
+      - "7660:7660"   # map host port for EHome server
+
     restart: unless-stopped
     networks:
       - backend_net
@@ -51,10 +64,8 @@ services:
     container_name: unigom_nginx
     ports:
       - "80:80"
-      # - "443:443"   # Uncomment when SSL certs are mounted
     volumes:
       - ./nginx.conf:/etc/nginx/nginx.conf:ro
-      # - ./certs:/etc/nginx/certs:ro   # SSL certs
     depends_on:
       - api
     restart: unless-stopped
@@ -62,7 +73,7 @@ services:
       - frontend_net
 
 volumes:
-  postgres_data:
+  mysql_data:
     driver: local
 
 networks:
